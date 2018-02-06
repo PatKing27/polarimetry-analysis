@@ -1,7 +1,6 @@
-#**************************VMAPP Class File: Nabla*****************************#
+#*********************************Nabla.py*************************************#
 #
-# Author: Patrick King, Date: 10/17/16
-#
+# Author: Patrick King, Date: 02/06/18
 #
 #
 #******************************************************************************#
@@ -13,7 +12,7 @@ from   Observer              import Observable
 
 class Nabla(object):
 
-    # Constructor for the Nabla class.
+    # Constructor.
     def __init__(self,args):
         self.beam       = args[0]
         self.N          = args[1]
@@ -163,11 +162,6 @@ class Nabla(object):
                 G2[i,j] = G2[i,j]/num
         return np.sqrt(G2)
 
-    def __GaussGradient(self, O):
-        data = O.data
-        grad = filters.gaussian_gradient_magnitude(data,sigma=self.pixelwidth,mode='wrap')
-        return np.absolute(grad)
-
     # Compute the Angle Gradient and construct and Observable object, then
     # return it.
     def ComputeAngleGradient(self, Q, U, mask):
@@ -181,7 +175,8 @@ class Nabla(object):
         sargs.append(self.N/self.pixelwidth)
         S      = Observable(sargs)
         return S
-
+    
+    # Compute S with numpy arrays instead of observables. 
     def OLessComputeAngleGradient(self, Q, U, mask):
         return self.__AngleGradient(Q,U, mask)
 
@@ -198,25 +193,6 @@ class Nabla(object):
         else:
             gunits = 'pc$^{-1}$'
         gargs  = [gdata,self.N,gnorm,glname,gsname,gunits,O.colmap,O.ax]
-        if self.pixelwidth == 1:
-            gargs.append(None)
-        else:
-            gargs.append(self.pixelwidth)
-        gargs.append(self.N/self.pixelwidth)
-        G      = Observable(gargs)
-        return G
-
-    def ComputeGaussGradient(self, O):
-        gdata = self.__GaussGradient(O)
-        gdata = gdata/max(self.pixelwidth,(1.0/self.N))
-        gnorm = 'log'
-        glname = O.lname + ' POS Gradient (Gauss)'
-        gsname = 'DG' + O.sname
-        if O.units is not None:
-            gunits = O.units + ' pc$^{-1}$'
-        else:
-            gunits = 'pc$^{-1}$'
-        gargs = [gdata,self.N,gnorm,glname,gsname,gunits,O.colmap,O.ax]
         if self.pixelwidth == 1:
             gargs.append(None)
         else:
