@@ -1,9 +1,7 @@
-#*************************VMAPP Class File: Rotator****************************#
+#********************************Rotator.py************************************#
 #
-# Author: Patrick King, Date: 10/25/16
+# Author: Patrick King, Date: 02/06/18
 #
-# The Rotator module contains yt-based techniques to change the viewing angle
-# for the synthetic observations.
 #
 #******************************************************************************#
 
@@ -13,8 +11,7 @@ from   scipy.ndimage.interpolation import rotate
 
 class Rotator(object):
 
-    # Constructor for the Rotator class. Instantiates the roll, pitch, and yaw
-    # assuming the base line of sight is the z-axis.
+    # Constructor. 
     def      __init__(self, args):
         self.roll  = args[0]
         self.pitch = args[1]
