@@ -11,7 +11,7 @@ Since the polarization observations contain an imprint of the magnetic field - a
 While these tools are intended for use by the observer, I have neglected to mention the other important half to these tools. I originally wrote these tools with an eye to analyzing *synthetic* observations of simulated molecular clouds. Accordingly I wrote these tools with that application in mind, and only later applied these techniques to real observations. Included here is the code I wrote to perform these synthetic observations on 3D magnetohydrodynamics simulations.
 
 ## code
-The code is written entirely in python, utilizing several scipy packages, especially numpy, yt, matplotlib, scipy.stats, and (most recently) fastkde. 
+The code is written entirely in python, utilizing several scipy packages, especially numpy, yt, matplotlib, scipy.stats, scipy.ndimage, and (most recently) fastkde. 
 
 ## wish list 
 * output 
@@ -29,3 +29,6 @@ The code is written entirely in python, utilizing several scipy packages, especi
 * sampling/resampling 
   * Nyquist sampling 
   * arbitrary beamform 
+* plotting 
+  * update natural imaging 
+  * eliminate deprecated phase histograms and implement simple KDE visualization 
