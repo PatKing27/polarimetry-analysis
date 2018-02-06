@@ -32,3 +32,4 @@ The code is written entirely in python, utilizing several scipy packages, especi
 * plotting 
   * update natural imaging 
   * eliminate deprecated phase histograms and implement simple KDE visualization 
+* A name for the code!
