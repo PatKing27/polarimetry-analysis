@@ -8,19 +8,12 @@ Linearly polarized signals in the typical targets of these observations - giant 
 
 Since the polarization observations contain an imprint of the magnetic field - albeit projected, density weighted, and combined nonlinearly - analyzing them can provide some insight into the magnetic field orientation, dynamics, and maybe even field strength (all of which I collectively call *magnetic field structure.*) The tools in this repository are some of the tools I've implemented to try to gain this insight. Hopefully this will provide a solid foundation that can be built upon and expanded to ever more sophisticated tools. 
 
-While these tools are intended for use by the observer, I have neglected to mention the other important half to these tools. I originally wrote these tools with an eye to analyzing *synthetic* observations of simulated molecular clouds. Accordingly I wrote these tools with that application in mind, and only later applied these techniques to real observations. Included here is the code I wrote to perform these synthetic observations on 3D magnetohydrodynamics simulations.
+While these tools are intended for use by the observer, I have neglected to mention the other important half to these tools. I originally wrote these tools with an eye to analyzing *synthetic* observations of simulated molecular clouds. Accordingly I wrote these tools with that application in mind, and only later applied these techniques to real observations. Included here is the code I wrote to perform these synthetic observations on 3D magnetohydrodynamics simulations. This code has now been substantially improved to take advantage of native Numpy, and several new grain alignment schemes have been implemented as well. 
 
 ## code
 The code is written entirely in python, utilizing several scipy packages, especially numpy, yt, matplotlib, scipy.stats, scipy.ndimage, and (most recently) fastkde. 
 
 ## wish list 
-* output 
-  * store observational datasets in natural, rapidly readable form
-  * store costly calculated products like kernel density estimation PDFs for later use 
-* optimization
-  * synthetic observations: costly numpy summation replaced with Cython implementation 
-* continuum/line observation integration 
-  * M0, M1, M2 - line-of-sight velocity 
 * new analysis/visualization 
   * Projected Rayleigh Statistic and Histogram of Relative Orientations 
   * Line Integral Convolution (LIC)
@@ -29,7 +22,4 @@ The code is written entirely in python, utilizing several scipy packages, especi
 * sampling/resampling 
   * Nyquist sampling 
   * arbitrary beamform 
-* plotting 
-  * update natural imaging 
-  * eliminate deprecated phase histograms and implement simple KDE visualization 
 * A name for the code!
