@@ -1,7 +1,9 @@
-#********************************Rotator.py************************************#
+#*******************************Rotator.py*************************************#
 #
 # Author: Patrick King, Date: 02/06/18
 #
+# Update (PKK) 04/17/18: Updates to ensure compatibility with Observer and
+# Observable.
 #
 #******************************************************************************#
 
@@ -11,7 +13,8 @@ from   scipy.ndimage.interpolation import rotate
 
 class Rotator(object):
 
-    # Constructor. 
+    # Constructor for the Rotator class. Instantiates the roll, pitch, and yaw
+    # assuming the base line of sight is the z-axis.
     def      __init__(self, args):
         self.roll  = args[0]
         self.pitch = args[1]
@@ -24,13 +27,16 @@ class Rotator(object):
         B = np.zeros(np.shape(A))
         if axis == 0:
             for i in range(self.N):
-                B[:,:,i] = rotate(A[:,:,i], angle, reshape=False,order=self.order,mode='wrap')
+                B[:,:,i] = rotate(A[:,:,i], angle, reshape=False,
+                                  order=self.order,mode='wrap')
         elif axis == 1:
             for i in range(self.N):
-                B[:,i,:] = rotate(A[:,i,:], angle, reshape=False,order=self.order,mode='wrap')
+                B[:,i,:] = rotate(A[:,i,:], angle, reshape=False,
+                                  order=self.order,mode='wrap')
         else:
             for i in range(self.N):
-                B[i,:,:] = rotate(A[i,:,:], angle, reshape=False,order=self.order,mode='wrap')
+                B[i,:,:] = rotate(A[i,:,:], angle, reshape=False,
+                                  order=self.order,mode='wrap')
         return B
 
     # Rotate Scalar Field, defined by S
