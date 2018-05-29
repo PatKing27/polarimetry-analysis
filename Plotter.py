@@ -1,8 +1,11 @@
-#*******************************Plotter.py*************************************#
+#******************************Plotter.py**************************************#
 #
 # Author: Patrick King, Date: 02/06/18
 #
+# Update (PKK) 04/17/18: Elimiated deprecated methods. Passed testing.
+#
 #******************************************************************************#
+
 import os
 import numpy                 as     np
 import matplotlib.pyplot     as     plt
@@ -17,7 +20,8 @@ from   Observer              import Observable
 from   Stats                 import *
 
 class Plotter(object):
-    # Constructor.
+    # Constructor. Initializes several common variables, and sets global plot
+    # characteristics.
     def __init__(self, args):
         self.N      = args[0]
         self.boxlen = args[1]
@@ -48,7 +52,7 @@ class Plotter(object):
         bds  = O.bounds
         colmap = O.colmap
         hndl = [O.lname, O.units, fgname]
-        axes = O.ax
+        axes = O.axes
         bm   = O.beam
         # Instantiate matplotlib objects.
         fig = plt.figure()
@@ -91,85 +95,14 @@ class Plotter(object):
         if bm is not None:
             bc = plt.Circle((30,30),bm,color='r',linewidth=1.5,fill=False)
             ax.add_artist(bc)
+        #if self.rot is not None:
+        #    strrot = 'Roll: {:0.3f}, Pitch: {:0.3f}, Yaw: {:0.3f}'.format(self.rot[0],self.rot[1],self.rot[2])
+        #    plt.title(hndl[0] + ' (' + hndl[1] + ')' + '\n (' + strrot + ')')
         else:
             plt.title(hndl[0] + ' (' + hndl[1] + ')')
         # Clear the figure and close it.
         # Attach relevant title handle and save the figure.
         plt.savefig(self.md+'/'+hndl[2]+'.png',dpi=self.dpi,bbox_inches='tight')
-        plt.clf()
-        plt.close('all')
-        return
-
-    def Hist(self, O, fgname):
-        Odata = O.nyquist
-        fig = plt.figure()
-        ax  = fig.gca()
-        if O.norm == 'log':
-            nrm = True
-        else:
-            nrm = False
-        plt.hist(Odata,bins=50,range=O.bounds,log=nrm)
-        plt.title(O.lname)
-        plt.xlabel(O.sname)
-        plt.savefig(self.hd+'/'+fgname+'.eps',dpi=self.dpi,bbox_inches='tight')
-        plt.clf()
-        plt.close('all')
-
-    # This method produces a 2d histogram phase plot of two observables computed
-    # at each point on the sky. Requires the two observables, the desired
-    # colormap, and the name of the file.
-    #
-    # !!! DEPRECATED !!!
-    # Phase histograms will be phased out in favor of kernel density estimation 
-    # methods. Replacement with a simple KDE + PCA plotter on to-do list. 
-    #
-    def PhaseHist(self, O1, O2, colmap, fgname, titlestr):
-        # Obtain information from Observable Objects
-        v1    = O1.nyquist
-        v2    = O2.nyquist
-        bns   = [O1.bins, O2.bins]
-        norms = [O1.norm, O2.norm]
-        hndl  = [O1.sname+' ('+O1.units+')', O2.sname+' ('+O2.units+')', fgname]
-        # Begin plotting.
-        fig = plt.figure()
-        ax  = fig.gca()
-        # Generate 2d histogram and attempt to find the nearest log10 of the
-        # maximum count. This must be done prior to masking. Then, create the
-        # normalization of the number of counts.
-        ct, xe, ye = np.histogram2d(v1,v2,bins=[bns[0],bns[1]])
-        try:
-            maxct = np.ceil(np.log10(np.max(ct)))
-        except OverflowError:
-            maxct = 2
-        normmap = LogNorm(vmin=1,vmax=10**maxct)
-        # Mask entries with no counts so the plot only displays useful data.
-        ct = np.ma.masked_array(ct, ct == 0)
-        # Create the phase plot of the 2d histogram, and set the scales, axes
-        # labels, and colorbar.
-        im = ax.pcolormesh(bns[0], bns[1], ct.T, cmap=colmap, norm = normmap)
-        ax.set_xscale(norms[0])
-        ax.set_yscale(norms[1])
-        plt.xlabel(hndl[0])
-        plt.ylabel(hndl[1])
-        cb = fig.colorbar(im, ax=ax, pad=0.0)
-        cb.set_label('Counts')
-        ax.axis('tight')
-        # Power law fitting: compute linear regression in log-log space, and
-        # annotate power law index and coefficient of determination. Only do
-        # this if both scales are logarithmic.
-        St = Stats([self.fitres,10])
-        xfit, yfit ,sl, cpt, r, p, er = St.LinearRegression(O1,O2)
-        if norms[0] == 'log' and norms[1] == 'log':
-            lbl = 'Index = {:0.3f} \n r$^2$ = {:0.3e}'.format(sl,r**2)
-        else:
-            lbl = 'Slope = {:0.3f} \n r$^2$ = {:0.3e}'.format(sl,r**2)
-        lbl += '\n stderr = {:0.3e}'.format(er)
-        plt.plot(xfit, yfit, 'r-', label=lbl)
-        plt.legend(loc=4,fontsize='medium')
-        plt.title(titlestr)
-        # Save the figure.
-        fig.savefig(self.pd+'/'+hndl[2]+'.eps',dpi=self.dpi,bbox_inches='tight')
-        # Clear the figure and close it.
         plt.clf()
         plt.close('all')
         return
