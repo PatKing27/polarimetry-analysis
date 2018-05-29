@@ -1,25 +1,45 @@
-#*********************************Nabla.py*************************************#
+#********************************Nabla.py**************************************#
 #
 # Author: Patrick King, Date: 02/06/18
 #
+# Update (PKK), 04/17/18: Changes made in accord with modifications to Observer
+# and Observable. Made AngleGradient and Gradient public for numpy arrays.
+# Added mask support for Gradient. Added write support for new Gradient and
+# AngleGradient Observables.
+#
+# Update (PKK) 04/24/18: Bugfixes related to mask operations. Passed testing.
 #
 #******************************************************************************#
 
 import numpy                 as     np
 from   math                  import *
 import scipy.ndimage.filters as     filters
-from   Observer              import Observable
+from   Observer              import *
 
 class Nabla(object):
 
-    # Constructor.
+    # Constructor for the Nabla class.
     def __init__(self,args):
         self.beam       = args[0]
+        if self.beam is None:
+            self.beam = 0.0
         self.N          = args[1]
         self.boxlen     = args[2]
         self.sigma      = self.beam/(sqrt(8.0*log(2)))
         self.pixelwidth = max(int(self.N*self.sigma/(self.boxlen)), 1)
-        self.scale = self.__CalculateScales()
+        self.scale      = self.__CalculateScales()
+        self.path       = './'
+        self.Writer = Observer([None, self.N, self.boxlen, './'])
+
+    # Mutator to change the optional label for saving.
+    def ChangeOptLabel(self, new_optlabel):
+        Writer.ChangeOptLabel(new_optlabel)
+        return
+
+    # Mutator to change the path to save.
+    def     ChangePath(self, new_path):
+        Writer.ChangePath(new_path)
+        return
 
     # This function produces the x,y combinations of pixels that correspond to a
     # circle the width of the pixelwidth chosen to compute our gradients. These
@@ -49,7 +69,7 @@ class Nabla(object):
 
     # This function computes the angular scalar gradient (using the DQU function
     # to properly account for angular differences) for angular quantities.
-    def __AngleGradient(self, Q, U, mask):
+    def AngleGradient(self, Q, U, mask):
         q = np.array(Q.data)
         u = np.array(U.data)
         xlim = q.shape[0]
@@ -92,12 +112,12 @@ class Nabla(object):
                             num += 1
                 if num != 0:
                     S2[i,j] = S2[i,j]/num
-        return np.sqrt(S2)
+        return np.ma.masked_array(np.sqrt(S2),mask)
 
     # This function computes the ordinary scalar gradient, simply computing the
     # squared finite differences at the specified scales for typical POS
     # quantities.
-    def __Gradient(self, O):
+    def      Gradient(self, O, mask):
         v  = O.data
         xlim = v.shape[0]
         ylim = v.shape[1]
@@ -105,98 +125,107 @@ class Nabla(object):
         for i in range(xlim):
             for j in range(ylim):
                 num = 0
-                for vec in self.scale:
-                    a = vec[0]
-                    b = vec[1]
-                    if (i + a) > (xlim - 1):
-                        ip = i + a - xlim
-                        if (j + b) > (ylim - 1):
-                            jp = j + b - ylim
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                        elif (j + b) < 0:
-                            jp = j + b + ylim
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
+                if not mask[i,j]:
+                    for vec in self.scale:
+                        a = vec[0]
+                        b = vec[1]
+                        if (i + a) > (xlim - 1):
+                            ip = i + a - xlim
+                            if (j + b) > (ylim - 1):
+                                jp = j + b - ylim
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                            elif (j + b) < 0:
+                                jp = j + b + ylim
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                            else:
+                                jp = j + b
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                        elif (i + a) < 0:
+                            ip = i + a + xlim
+                            if (j + b) > (ylim - 1):
+                                jp = j + b - ylim
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                            elif (j + b) < 0:
+                                jp = j + b + ylim
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                            else:
+                                jp = j + b
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
                         else:
-                            jp = j + b
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                    elif (i + a) < 0:
-                        ip = i + a + xlim
-                        if (j + b) > (ylim - 1):
-                            jp = j + b - ylim
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                        elif (j + b) < 0:
-                            jp = j + b + ylim
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                        else:
-                            jp = j + b
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                    else:
-                        ip = i + a
-                        if (j + b) > (ylim - 1):
-                            jp = j + b - ylim
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                        elif (j + b) < 0:
-                            jp = j + b + ylim
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                        else:
-                            jp = j + b
-                            inc = (v[ip,jp] - v[i,j])**2
-                            G2[i,j] += inc
-                            num += 1
-                G2[i,j] = G2[i,j]/num
-        return np.sqrt(G2)
+                            ip = i + a
+                            if (j + b) > (ylim - 1):
+                                jp = j + b - ylim
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                            elif (j + b) < 0:
+                                jp = j + b + ylim
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                            else:
+                                jp = j + b
+                                inc = (v[ip,jp] - v[i,j])**2
+                                G2[i,j] += inc
+                                num += 1
+                        G2[i,j] = G2[i,j]/num
+        return np.ma.masked_array(np.sqrt(G2),mask)
 
     # Compute the Angle Gradient and construct and Observable object, then
     # return it.
     def ComputeAngleGradient(self, Q, U, mask):
-        sdata  = self.__AngleGradient(Q, U, mask)
-        snorm  = 'log'
-        slname = 'Dispersion in Polarization Angles'
-        ssname = 'S'
-        sunits = 'Degrees'
-        sargs  = [sdata,self.N,snorm,slname,ssname,sunits,'gist_heat',Q.ax]
-        sargs.append(self.pixelwidth)
-        sargs.append(self.N/self.pixelwidth)
-        S      = Observable(sargs)
+        sdata  = self.AngleGradient(Q, U, mask)
+        sargs  = [sdata,
+                  self.N,
+                  'log',
+                  'Dispersion in Polarization Angles',
+                  '$S$',
+                  'Degrees',
+                  'gist_heat',
+                  Q.axes,
+                  Q.rotation]
+        if self.pixelwidth == 1:
+            sargs.append(None)
+        else:
+            sargs.append(self.pixelwidth)
+        S = Observable(sargs)
+        self.Writer.WriteObservable(S)
         return S
-    
-    # Compute S with numpy arrays instead of observables. 
-    def OLessComputeAngleGradient(self, Q, U, mask):
-        return self.__AngleGradient(Q,U, mask)
 
     # Compute an ordinary scalar gradient, construct an Observable object, and
     # return it.
-    def ComputeGradient(self, O):
-        gdata  = self.__Gradient(O)
+    def      ComputeGradient(self, O, mask):
+        gdata  = self.Gradient(O, mask)
         gdata = gdata/max(self.pixelwidth,(1.0/self.N))
-        gnorm  = 'log'
-        glname = O.lname + ' POS Gradient'
-        gsname = 'D' + O.sname
         if O.units is not None:
             gunits = O.units + ' pc$^{-1}$'
         else:
             gunits = 'pc$^{-1}$'
-        gargs  = [gdata,self.N,gnorm,glname,gsname,gunits,O.colmap,O.ax]
+        gargs  = [gdata,
+                  self.N,
+                  'log',
+                  O.lname + ' POS Gradient',
+                  'D' + O.sname,
+                  gunits,
+                  O.colmap,
+                  O.axes,
+                  O.rotation]
         if self.pixelwidth == 1:
             gargs.append(None)
         else:
             gargs.append(self.pixelwidth)
-        gargs.append(self.N/self.pixelwidth)
-        G      = Observable(gargs)
+        G = Observable(gargs)
+        self.Writer.WriteObservable(G)
         return G
