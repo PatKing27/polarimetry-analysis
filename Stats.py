@@ -65,6 +65,11 @@ class Stats(object):
         evecs        = evecs[:, sort]
         return evals, evecs
 
+    def CorrCoeffs(self, X, Y, return_p):
+        r_pearson,  p_pearson  = stats.pearsonr(X, Y)
+        r_spearman, p_spearman = stats.spearmanr(X, Y)
+        return r_pearson, r_spearman
+            
     def Save2DKDE(self, xx, yy, f, filename, method):
         assert method in ('Gaussian','Fast')
         if method == 'Gaussian':
