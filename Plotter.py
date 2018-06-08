@@ -3,6 +3,7 @@
 # Author: Patrick King, Date: 02/06/18
 #
 # Update (PKK) 04/17/18: Elimiated deprecated methods. Passed testing.
+# Update (PKK) 06/08/18: Eliminated deprecated attributes.
 #
 #******************************************************************************#
 
@@ -28,20 +29,9 @@ class Plotter(object):
         self.ntklbl = args[2]
         self.dpi    = args[3]
         self.path   = args[4]
-        self.rot    = args[5]
-        self.fitres = args[6]
         plt.rcParams['font.family'] = 'serif'
         self.ticks  = np.linspace(0,self.N,self.ntklbl,dtype=int)
         self.labels = np.linspace(-self.boxlen/2.0,self.boxlen/2.0,self.ntklbl)
-        self.md     = self.path+'/Maps'
-        self.pd     = self.path+'/PhaseHist'
-        self.sd     = self.path+'/ParSeries'
-        if not os.path.exists(self.path+'/Maps'):
-            os.makedirs(self.path+'/Maps')
-        if not os.path.exists(self.path+'/PhaseHist'):
-            os.makedirs(self.path+'/PhaseHist')
-        if not os.path.exists(self.path+'/ParSeries'):
-            os.makedirs(self.path+'/ParSeries')
 
     # This method produces a simple map given a 2d array. It requires the
     # Observable, the name of the figure, and the (optional) beam.
@@ -51,7 +41,6 @@ class Plotter(object):
         norm = O.norm
         bds  = O.bounds
         colmap = O.colmap
-        hndl = [O.lname, O.units, fgname]
         axes = O.axes
         bm   = O.beam
         # Instantiate matplotlib objects.
@@ -95,14 +84,9 @@ class Plotter(object):
         if bm is not None:
             bc = plt.Circle((30,30),bm,color='r',linewidth=1.5,fill=False)
             ax.add_artist(bc)
-        #if self.rot is not None:
-        #    strrot = 'Roll: {:0.3f}, Pitch: {:0.3f}, Yaw: {:0.3f}'.format(self.rot[0],self.rot[1],self.rot[2])
-        #    plt.title(hndl[0] + ' (' + hndl[1] + ')' + '\n (' + strrot + ')')
-        else:
-            plt.title(hndl[0] + ' (' + hndl[1] + ')')
         # Clear the figure and close it.
         # Attach relevant title handle and save the figure.
-        plt.savefig(self.md+'/'+hndl[2]+'.png',dpi=self.dpi,bbox_inches='tight')
+        plt.savefig(self.path+figname+'.png',dpi=self.dpi,bbox_inches='tight')
         plt.clf()
         plt.close('all')
         return
