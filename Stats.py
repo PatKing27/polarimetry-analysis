@@ -11,11 +11,17 @@
 # Update (PKK) 04/24/18: Added read/write capability to KDE operations. Passed
 # testing. TO DO: PCA still needs testing.
 #
+# Update (PKK) 06/27/18: Adding some consistency checks in the GaussianKDE
+# methods to ensure that you can pass it arbitarily shaped arrays, provided
+# they are square. Additionally, adding some functionality wherein you can send
+# them observables naturally.
+#
 #******************************************************************************#
 
 from   math        import *
 import numpy       as     np
 import scipy.stats as     stats
+from   Observer    import *
 
 class Stats(object):
     # Constructor.
@@ -32,12 +38,30 @@ class Stats(object):
             self.G2Dres = res
 
     def Gaussian1DKDE(self, X, xb):
+        if type(X) is Observable:
+            X = X.data
+        if len(X.shape) != 1:
+            n = 1
+            for s in X.shape:
+                n *= s
+            X = X.reshape(n)
         xx     = np.linspace(xb[0],xb[-1],self.G1Dres)
         kernel = stats.gaussian_kde(X)
         f      = np.reshape(kernel(xx), xx.shape)
         return xx, f
 
     def Gaussian2DKDE(self, X, Y, xb, yb):
+        if type(X) is Observable:
+            X = X.data
+        if type(Y) is Observable:
+            Y = Y.data
+        assert X.shape == Y.shape
+        if len(X.shape) != 1:
+            n = 1
+            for s in X.shape:
+                n *= s
+            X = X.reshape(n)
+            Y = Y.reshape(n)
         xx, yy = np.mgrid[xb[0]:xb[-1]:self.G2Dres*1j,
                           yb[0]:yb[-1]:self.G2Dres*1j]
         pos    = np.vstack([xx.ravel(),yy.ravel()])
@@ -69,7 +93,7 @@ class Stats(object):
         r_pearson,  p_pearson  = stats.pearsonr(X, Y)
         r_spearman, p_spearman = stats.spearmanr(X, Y)
         return r_pearson, r_spearman
-            
+
     def Save2DKDE(self, xx, yy, f, filename, method):
         assert method in ('Gaussian','Fast')
         if method == 'Gaussian':
