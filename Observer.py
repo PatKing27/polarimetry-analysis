@@ -21,6 +21,12 @@
 # function of both gas density and minimum aligned grain size. More TO DO: add
 # output for stacks of 2D observables as FITS files.
 #
+# Update (PKK) 07/16/18: Updates to restrict choices in grain populations to
+# only those recommended in WD01. Changed 'DIFFUSE' option to 'CONSTANT' to
+# allow for other constant extinction models. Added 'EMPIRICAL' option,
+# including the polynomial fits obtained from empirical analysis of models A,
+# B, C, and D. Changed order of pol_args for RAT models. 
+#
 #******************************************************************************#
 
 import yt
@@ -280,15 +286,107 @@ class Observer(object):
             emmcube += (denscube <= dens0).astype(float)
             emmcube *= p0
         elif pol_args[0] == 'RAT':
-            assert pol_args[1] in ['MRN','WD01']
-            assert pol_args[2] in ['ISOSPHERE','DIFFUSE']
-            if pol_args[2] == 'ISOSPHERE':
+            assert pol_args[1] in ['CONSTANT', 'ISOSPHERE', 'EMPIRICAL']
+            assert pol_args[3] in ['MRN', 'WD01']
+            # First prescribe the extinction closure relation, and compute it
+            # at every voxel.
+            if   pol_args[1] == 'CONSTANT':
+                A_vcube = pol_args[2]*np.ones((self.N,self.N,self.N))
+            elif pol_args[1] == 'ISOSPHERE':
                 A_vcube = 0.00856*np.power(denscube,0.5)
-            elif pol_args[2] == 'DIFFUSE':
-                A_vcube = np.zeros((self.N,self.N,self.N))
+            elif pol_args[1] == 'EMPIRICAL':
+                assert pol_args[2] in ['A', 'B', 'C', 'D']
+                if   pol_args[2] == 'A':
+                    func = np.polyfit1d(np.array([ 4.21870350018e-10,
+                                                  -2.19461974994e-08,
+                                                   4.92652251549e-07,
+                                                  -6.17477917945e-06,
+                                                   4.62292370684e-05,
+                                                  -0.000198392912098,
+                                                   0.000346293959376,
+                                                   0.000787930673671,
+                                                  -0.00506845420228,
+                                                   0.0072720833324,
+                                                   0.00693482143403,
+                                                  -0.0364072044455,
+                                                   0.0615043596244,
+                                                   0.00626053956246,
+                                                  -0.292072586308,
+                                                   0.111155196874,
+                                                   0.640030513942,
+                                                   1.36407768739,
+                                                  -3.95250186687]))
+                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube *= (A_vcube >= 1.0E-4)
+                elif pol_args[2] == 'B':
+                    func = np.polyfit1d(np.array([ 2.05848240995e-09,
+                                                  -1.26175530759e-07,
+                                                   3.40103591179e-06,
+                                                  -5.26264680614e-05,
+                                                   0.000509057609342,
+                                                  -0.00309780910834,
+                                                   0.0107598572898,
+                                                  -0.0105148836,
+                                                  -0.072735482533,
+                                                   0.295496673367,
+                                                  -0.204227150427,
+                                                  -1.07203827249,
+                                                   2.10649156651,
+                                                   0.975962929768,
+                                                  -4.75610879615,
+                                                   0.451288148389,
+                                                   4.0886319919,
+                                                   1.09436004486,
+                                                  -4.47800812582]))
+                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube *= (A_vcube >= 1.0E-4)
+                elif pol_args[2] == 'C':
+                    func = np.polyfit1d(np.array([ 7.90929751663e-10,
+                                                  -4.49385856431e-08,
+                                                   1.12216994503e-06,
+                                                  -1.60698577094e-05,
+                                                   0.000143657584479,
+                                                  -0.000806738961874,
+                                                   0.0025851200757,
+                                                  -0.0023669150312,
+                                                  -0.014699262845,
+                                                   0.0577899811235,
+                                                  -0.0561445323617,
+                                                  -0.1160233399,
+                                                   0.348356347177,
+                                                  -0.260919919446,
+                                                  -0.292981009761,
+                                                   0.786508411759,
+                                                  -0.317279554167,
+                                                   0.978145153807,
+                                                  -3.27571257558]))
+                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube *= (A_vcube >= 1.0E-4)
+                elif pol_args[2] == 'D':
+                    func = np.polyfit1d(np.array([-2.00460882937e-09,
+                                                   1.05167118987e-07,
+                                                  -2.38095917283e-06,
+                                                   3.00234797435e-05,
+                                                  -0.000223872347121,
+                                                   0.000918759003185,
+                                                  -0.00107285550665,
+                                                  -0.00756273997245,
+                                                   0.0334226071445,
+                                                  -0.0181972790584,
+                                                  -0.165657223152,
+                                                   0.286341386467,
+                                                   0.301863776495,
+                                                  -0.840497080756,
+                                                  -0.247373236791,
+                                                   0.74714418236,
+                                                   0.286774109921,
+                                                   1.52670679488,
+                                                  -3.59614415374]))
+                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube *= (A_vcube >= 1.0E-4)
             a_algcube = (A_vcube+5.0)*(np.power(np.log10(denscube),3.0))/4800.0
-            a_min = pol_args[3]
-            a_max = pol_args[4]
+            a_min = pol_args[4]
+            a_max = pol_args[5]
             # check that the minimum aligned grain sizes are within the grain
             # population supplied.
             for a_alg in np.nditer(a_algcube):
@@ -297,72 +395,25 @@ class Observer(object):
                 if a_alg > a_max:
                     a_alg = a_max
             emmcube = np.zeros((self.N,self.N,self.N))
-            if pol_args[1] == 'MRN':
+            # Next, compute the polarization efficiency using the prescribed
+            # grain population.
+            if pol_args[3] == 'MRN':
                 denom = 3.9*self.__MRN(a_min, a_max)
                 for k in range(self.N):
                     for j in range(self.N):
                         for i in range(self.N):
                             emmcube[i,j,k] = self.__MRN(a_algcube[i,j,k], a_max)
-            elif pol_args[1] == 'WD01':
-                assert pol_args[5] in [4.0, 5.5]
-                assert pol_args[6] in ['1A','2A','3A','4A','5A',
-                                       '1B','2B','3B','4B']
-                if   pol_args[5] == 4.0:
-                    if   pol_args[6] == '1A':
-                        paramsS = [-2.03,  0.66800, 0.18900, 0.100, 5.20E-14]
-                        paramsC = [-2.26, -0.19900, 0.02410, 0.861, 5.47E-12, 0.0E-5]
-                    elif pol_args[6] == '2A':
-                        paramsS = [-2.05,  0.83200, 0.18800, 0.100, 4.81E-14]
-                        paramsC = [-2.16, -0.08620, 0.00867, 0.803, 4.58E-11, 1.0E-5]
-                    elif pol_args[6] == '3A':
-                        paramsS = [-2.06,  0.99500, 0.18500, 0.100, 4.70E-14]
-                        paramsC = [-2.01, -0.09730, 0.00811, 0.696, 3.96E-11, 2.0E-5]
-                    elif pol_args[6] == '4A':
-                        paramsS = [-2.08,  1.29000, 0.18400, 0.100, 4.26E-14]
-                        paramsC = [-1.83, -0.17500, 0.01170, 0.604, 1.42E-11, 3.0E-5]
-                    elif pol_args[6] == '5A':
-                        paramsS = [-2.09,  1.58000, 0.18300, 0.100, 3.94E-14]
-                        paramsC = [-1.64, -0.24700, 0.01520, 0.536, 5.83E-12, 4.0E-5]
-                    elif pol_args[6] == '1B':
-                        paramsS = [-2.01,  0.89400, 0.19800, 0.100, 4.95E-14]
-                        paramsC = [-2.62, -0.01440, 0.01870, 5.740, 6.46E-12, 0.0E-5]
-                    elif pol_args[6] == '2B':
-                        paramsS = [-2.11,  1.58000, 0.19700, 0.100, 3.69E-14]
-                        paramsC = [-2.52, -0.05410, 0.03660, 6.650, 1.08E-12, 1.0E-5]
-                    elif pol_args[6] == '3B':
-                        paramsS = [-2.05,  1.19000, 0.19700, 0.100, 4.37E-14]
-                        paramsC = [-2.36, -0.09570, 0.03050, 6.440, 1.62E-12, 2.0E-5]
-                    elif pol_args[6] == '4B':
-                        paramsS = [-2.10,  1.64000, 0.19800, 0.100, 3.63E-14]
-                        paramsC = [-2.09, -0.19300, 0.01990, 4.600, 4.21E-12, 3.0E-5]
-                    elif pol_args[6] == '5B':
-                        paramsS = [-2.11,  2.10000, 0.19800, 0.100, 3.13E-14]
-                        paramsC = [-1.96, -0.81300, 0.06930, 3.480, 2.95E-13, 4.0E-5]
-                elif pol_args[5] == 5.5:
-                    if   pol_args[6] == '1A':
-                        paramsS = [-1.57,  1.10000, 0.19800, 0.100, 4.24E-14]
-                        paramsC = [-2.35, -0.66800, 0.14800, 1.960, 4.82E-14, 0.0E-5]
-                    elif pol_args[6] == '2A':
-                        paramsS = [-1.57,  1.25000, 0.19700, 0.100, 4.00E-14]
-                        paramsC = [-2.12, -0.67000, 0.06860, 1.350, 3.65E-13, 1.0E-5]
-                    elif pol_args[6] == '3A':
-                        paramsS = [-1.55,  1.33000, 0.19500, 0.100, 4.05E-14]
-                        paramsC = [-1.94, -0.85300, 0.07860, 0.921, 2.57E-13, 2.0E-5]
-                    elif pol_args[6] == '4A':
-                        paramsS = [-1.59,  2.12000, 0.19300, 0.100, 3.20E-14]
-                        paramsC = [-1.61, -0.72200, 0.04180, 0.720, 7.58E-13, 3.0E-5]
-                    elif pol_args[6] == '1B':
-                        paramsS = [-1.09, -0.37000, 0.21800, 0.100, 1.17E-13]
-                        paramsC = [-2.80,  0.03560, 0.02030, 3.430, 2.74E-12, 0.0E-5]
-                    elif pol_args[6] == '2B':
-                        paramsS = [-1.14, -0.19500, 0.21600, 0.100, 1.05E-13]
-                        paramsC = [-2.67,  0.01290, 0.01340, 3.440, 7.25E-12, 1.0E-5]
-                    elif pol_args[6] == '3B':
-                        paramsS = [-1.08, -0.33600, 0.21600, 0.100, 1.17E-13]
-                        paramsC = [-2.45, -0.00132, 0.02750, 5.140, 8.79E-13, 2.0E-5]
-                    elif pol_args[6] == '4B':
-                        paramsS = [-1.13, -0.10900, 0.21100, 0.100, 1.04E-13]
-                        paramsC = [-1.90, -0.05170, 0.01200, 7.280, 2.86E-12, 3.0E-5]
+            elif pol_args[3] == 'WD01':
+                assert pol_args[6] in [3,1, 4.0, 5.5]
+                if   pol_args[6] == 3.1:
+                    paramsS = [-2.21,  0.300, 0.164,  0.10,  1.00E-13]
+                    paramsC = [-1.54, -0.165, 0.0107, 0.428, 9.99E-12, 6.0E-5]
+                elif pol_args[6] == 4.0:
+                    paramsS = [-2.09,  1.58,  0.183,  0.10,  3.94E-14]
+                    paramsC = [-1.64, -0.247, 0.0152, 0.536, 5.83E-12, 4.0E-5]
+                elif pol_args[6] == 5.5:
+                    paramsS = [-1.59,  2.12,  0.193,  0.10,  3.20E-14]
+                    paramsC = [-1.61, -0.722, 0.0418, 0.720, 7.58E-13, 3.0E-5]
                 paramsS.append(pol_args[7])
                 paramsC.append(pol_args[7])
                 denom   = 1.5*(    self.__WDS01(a_min, a_max, paramsS)+
@@ -383,10 +434,103 @@ class Observer(object):
                 # sizes.
                 a_alginterp = np.zeros(pol_args[7])
                 for i in range(pol_args[7]):
-                    if pol_args[2] == 'ISOSPHERE':
+                    if   pol_args[1] == 'CONSTANT':
+                        A_vi = pol_args[2]
+                    elif pol_args[1] == 'ISOSPHERE':
                         A_vi = 0.00856*np.power(densinterp[i],0.5)
-                    elif pol_args[2] == 'DIFFUSE':
-                        A_vi = 0.0
+                    elif pol_args[1] == 'EMPIRICAL':
+                        if   pol_args[2] == 'A':
+                            func = np.polyfit1d(np.array([ 4.21870350018e-10,
+                                                          -2.19461974994e-08,
+                                                           4.92652251549e-07,
+                                                          -6.17477917945e-06,
+                                                           4.62292370684e-05,
+                                                          -0.000198392912098,
+                                                           0.000346293959376,
+                                                           0.000787930673671,
+                                                          -0.00506845420228,
+                                                           0.0072720833324,
+                                                           0.00693482143403,
+                                                          -0.0364072044455,
+                                                           0.0615043596244,
+                                                           0.00626053956246,
+                                                          -0.292072586308,
+                                                           0.111155196874,
+                                                           0.640030513942,
+                                                           1.36407768739,
+                                                          -3.95250186687]))
+                            A_vi = 10.0**func(np.log10(densinterp[i]))
+                            if A_vi <= 1.0E-4:
+                                A_vi = 0.0
+                        elif pol_args[2] == 'B':
+                            func = np.polyfit1d(np.array([ 2.05848240995e-09,
+                                                          -1.26175530759e-07,
+                                                           3.40103591179e-06,
+                                                          -5.26264680614e-05,
+                                                           0.000509057609342,
+                                                          -0.00309780910834,
+                                                           0.0107598572898,
+                                                          -0.0105148836,
+                                                          -0.072735482533,
+                                                           0.295496673367,
+                                                          -0.204227150427,
+                                                          -1.07203827249,
+                                                           2.10649156651,
+                                                           0.975962929768,
+                                                          -4.75610879615,
+                                                           0.451288148389,
+                                                           4.0886319919,
+                                                           1.09436004486,
+                                                          -4.47800812582]))
+                            A_vi = 10.0**func(np.log10(densinterp[i]))
+                            if A_vi <= 1.0E-4:
+                                A_vi = 0.0
+                        elif pol_args[2] == 'C':
+                            func = np.polyfit1d(np.array([ 7.90929751663e-10,
+                                                          -4.49385856431e-08,
+                                                           1.12216994503e-06,
+                                                          -1.60698577094e-05,
+                                                           0.000143657584479,
+                                                          -0.000806738961874,
+                                                           0.0025851200757,
+                                                          -0.0023669150312,
+                                                          -0.014699262845,
+                                                           0.0577899811235,
+                                                          -0.0561445323617,
+                                                          -0.1160233399,
+                                                           0.348356347177,
+                                                          -0.260919919446,
+                                                          -0.292981009761,
+                                                           0.786508411759,
+                                                          -0.317279554167,
+                                                           0.978145153807,
+                                                          -3.27571257558]))
+                            A_vi = 10.0**func(np.log10(densinterp[i]))
+                            if A_vi <= 1.0E-4:
+                                A_vi = 0.0
+                        elif pol_args[2] == 'D':
+                            func = np.polyfit1d(np.array([-2.00460882937e-09,
+                                                           1.05167118987e-07,
+                                                          -2.38095917283e-06,
+                                                           3.00234797435e-05,
+                                                          -0.000223872347121,
+                                                           0.000918759003185,
+                                                          -0.00107285550665,
+                                                          -0.00756273997245,
+                                                           0.0334226071445,
+                                                          -0.0181972790584,
+                                                          -0.165657223152,
+                                                           0.286341386467,
+                                                           0.301863776495,
+                                                          -0.840497080756,
+                                                          -0.247373236791,
+                                                           0.74714418236,
+                                                           0.286774109921,
+                                                           1.52670679488,
+                                                          -3.59614415374]))
+                            A_vi = 10.0**func(np.log10(densinterp[i]))
+                            if A_vi <= 1.0E-4:
+                                A_vi = 0.0
                     a_alginterp[i] = (A_vi + 5.0)* \
                                      (np.power(np.log10(densinterp[i]),3.0)) \
                                      /4800.0
