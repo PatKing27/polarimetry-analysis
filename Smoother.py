@@ -33,11 +33,11 @@ class Smoother(object):
         self.Writer  = Observer([None, self.N, self.boxlen, './'])
 
     def ChangeOptLabel(self, new_optlabel):
-        Writer.ChangeOptLabel(new_optlabel)
+        self.Writer.ChangeOptLabel(new_optlabel)
         return
 
     def     ChangePath(self, new_path):
-        Writer.ChangePath(new_path)
+        self.Writer.ChangePath(new_path)
         return
 
     def Nyquist(self, O):
@@ -46,6 +46,7 @@ class Smoother(object):
         h         = int(self.posres/2)
         i, j      = np.meshgrid(*map(np.arange, img.shape), indexing = 'ij')
         masks     = [i >= self.N-h,j >= self.N-h,(i+h)%inc != 0,(j+h)%inc != 0]
+        masks.append(O.data.mask)
         totmask   = functools.reduce(np.logical_or, masks)
         img       = np.ma.masked_array(img, totmask)
         imgds     = img.compressed()
