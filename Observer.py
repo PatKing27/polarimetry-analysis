@@ -27,6 +27,14 @@
 # including the polynomial fits obtained from empirical analysis of models A,
 # B, C, and D. Changed order of pol_args for RAT models.
 #
+# Update (PKK) 07/31/18: Moved the yt data extraction outside of main loops
+# to prevent time and memory wasted on loading the data sets every time a
+# calculation is done.
+#
+# Update (PKK) 08/02/18: Numba branch.
+#
+# Update (PKK) 08/22/18: Bugfixes. Adding nogil/parallel to numba.
+#
 #******************************************************************************#
 
 import yt
@@ -220,28 +228,37 @@ class Observer(object):
         term2 = B2*exp(-0.5*(np.log(a/(3.0E-3))/0.4)**2.0)/a
         return term1 + term2
 
+    # Load data. Basic simulation requires a density (scalar) field; a
+    # momentum (vector) field; and a magnetic (vector) field. If your
+    # simulation uses velocity field instead of a momentum field, modify
+    # the formulation here. Additionally, this code may need to be modified
+    # if your simulation uses a different naming scheme than here. See the
+    # yt documentation for more details, but examining your dataset should
+    # give you the correct handle for the fields. You must execute this prior
+    # to running the main methods.
+    def DataLoad(self):
+        ds            = yt.load(self.src)
+        ad            = ds.all_data()
+        d             = [self.N, self.N, self.N]
+        adcg          = ds.covering_grid(level=0,left_edge=[0.0,0.0,0.0],dims=d)
+        self.denscube = adcg[self.densityhandle  ].to_ndarray()
+        self.Bxcube   = adcg[self.magneticxhandle].to_ndarray()
+        self.Bycube   = adcg[self.magneticyhandle].to_ndarray()
+        self.Bzcube   = adcg[self.magneticzhandle].to_ndarray()
+        self.B2cube   = np.square(self.Bxcube) + \
+                        np.square(self.Bycube) + \
+                        np.square(self.Bzcube)
+        self.mxcube   = adcg[self.momentumxhandle].to_ndarray()
+        self.mycube   = adcg[self.momentumyhandle].to_ndarray()
+        self.mzcube   = adcg[self.momentumzhandle].to_ndarray()
+        self.vzcube   = np.absolute(self.mzcube/self.denscube)
+        return
+
     # Base method for computing synthetic polarimetry along specified axis.
     # Writes observables computed at the end. Uses dust emissivity prescription
     # specified in pol_args, and excludes material in the simulation using
     # exc_args.
-    @ numba.jit(nopython=True)
     def     Polarimetry(self, exc_args, rot_args, pol_args):
-        # Load data. Basic simulation requires a density (scalar) field; a
-        # momentum (vector) field; and a magnetic (vector) field. If your
-        # simulation uses velocity field instead of a momentum field, modify
-        # the formulation here. Additionally, this code may need to be modified
-        # if your simulation uses a different naming scheme than here. See the
-        # yt documentation for more details, but examining your dataset should
-        # give you the correct handle for the fields.
-        ds           = yt.load(self.src)
-        ad           = ds.all_data()
-        d            = [self.N, self.N, self.N]
-        adcg         = ds.covering_grid(level=0,left_edge=[0.0,0.0,0.0],dims=d)
-        denscube     = adcg[self.densityhandle  ].to_ndarray()
-        Bxcube       = adcg[self.magneticxhandle].to_ndarray()
-        Bycube       = adcg[self.magneticyhandle].to_ndarray()
-        Bzcube       = adcg[self.magneticzhandle].to_ndarray()
-        B2cube       = np.square(Bxcube) + np.square(Bycube) + np.square(Bzcube)
         # exc_args. Modify these if you wish to adopt a different type of
         # exclusion criteria, or more of them.
         # First check if we will exclude by density threshold, and if so, create
@@ -250,21 +267,17 @@ class Observer(object):
         if exc_args[0] is not None:
             assert exc_args[0][0] in ['gt','lt']
             if   exc_args[0][0] == 'gt':
-                masks.append(denscube >= exc_args[0][1])
+                masks.append(self.denscube >= exc_args[0][1])
             elif exc_args[0][0] == 'lt':
-                masks.append(denscube <= exc_args[0][1])
+                masks.append(self.denscube <= exc_args[0][1])
         # Next check if we will adopt a z-velocity magnitude threshold, and if
         # so, create such a mask.
         if exc_args[1] is not None:
-            mxcube   = adcg[self.momentumxhandle].to_ndarray()
-            mycube   = adcg[self.momentumyhandle].to_ndarray()
-            mzcube   = adcg[self.momentumzhandle].to_ndarray()
-            vzcube   = np.absolute(mzcube/denscube)
             assert exc_args[1][0] in ('gt','lt')
             if   exc_args[1][0] == 'gt':
-                masks.append(vzcube >= exc_args[1][1])
+                masks.append(self.vzcube >= exc_args[1][1])
             elif exc_args[1][0] == 'lt':
-                masks.append(vzcube <= exc_args[1][1])
+                masks.append(self.vzcube <= exc_args[1][1])
         # Finally, combine the masks using logical_and, so that any voxel that
         # is masked by any mask is in the final mask. (Different flavors of
         # logic can be implemented at will.)
@@ -283,9 +296,9 @@ class Observer(object):
             dens0 = pol_args[2]
             dens0inv = dens0**(-1.0)
             index = pol_args[3]
-            emmcube  = (denscube >  dens0).astype(float)
-            emmcube *= np.power(denscube*dens0inv,index)
-            emmcube += (denscube <= dens0).astype(float)
+            emmcube  = (self.denscube >  dens0).astype(float)
+            emmcube *= np.power(self.denscube*dens0inv,index)
+            emmcube += (self.denscube <= dens0).astype(float)
             emmcube *= p0
         elif pol_args[0] == 'RAT':
             assert pol_args[1] in ['CONSTANT', 'ISOSPHERE', 'EMPIRICAL']
@@ -295,7 +308,7 @@ class Observer(object):
             if   pol_args[1] == 'CONSTANT':
                 A_vcube = pol_args[2]*np.ones((self.N,self.N,self.N))
             elif pol_args[1] == 'ISOSPHERE':
-                A_vcube = 0.00856*np.power(denscube,0.5)
+                A_vcube = 0.00856*np.power(self.denscube,0.5)
             elif pol_args[1] == 'EMPIRICAL':
                 assert pol_args[2] in ['A', 'B', 'C', 'D']
                 if   pol_args[2] == 'A':
@@ -318,7 +331,7 @@ class Observer(object):
                                                    0.640030513942,
                                                    1.36407768739,
                                                   -3.95250186687]))
-                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube = 10.0**func(np.log10(self.denscube))
                     A_vcube *= (A_vcube >= 1.0E-4)
                 elif pol_args[2] == 'B':
                     func = np.polyfit1d(np.array([ 2.05848240995e-09,
@@ -340,7 +353,7 @@ class Observer(object):
                                                    4.0886319919,
                                                    1.09436004486,
                                                   -4.47800812582]))
-                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube = 10.0**func(np.log10(self.denscube))
                     A_vcube *= (A_vcube >= 1.0E-4)
                 elif pol_args[2] == 'C':
                     func = np.polyfit1d(np.array([ 7.90929751663e-10,
@@ -362,7 +375,7 @@ class Observer(object):
                                                   -0.317279554167,
                                                    0.978145153807,
                                                   -3.27571257558]))
-                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube = 10.0**func(np.log10(self.denscube))
                     A_vcube *= (A_vcube >= 1.0E-4)
                 elif pol_args[2] == 'D':
                     func = np.polyfit1d(np.array([-2.00460882937e-09,
@@ -384,9 +397,10 @@ class Observer(object):
                                                    0.286774109921,
                                                    1.52670679488,
                                                   -3.59614415374]))
-                    A_vcube = 10.0**func(np.log10(denscube))
+                    A_vcube = 10.0**func(np.log10(self.denscube))
                     A_vcube *= (A_vcube >= 1.0E-4)
-            a_algcube = (A_vcube+5.0)*(np.power(np.log10(denscube),3.0))/4800.0
+            a_algcube = (A_vcube+5.0)*\
+                        (np.power(np.log10(self.denscube),3.0))/4800.0
             a_min = pol_args[4]
             a_max = pol_args[5]
             # check that the minimum aligned grain sizes are within the grain
@@ -429,8 +443,8 @@ class Observer(object):
                 # interpolate. This way, you use numpy efficiently. These
                 # interpolation techniques have been verified correct to within
                 # a tolerance of about 5E-5.
-                densinterp = 10.0**np.linspace(np.log10(np.min(denscube)),
-                                               np.log10(np.max(denscube)),
+                densinterp = 10.0**np.linspace(np.log10(np.min(self.denscube)),
+                                               np.log10(np.max(self.denscube)),
                                                pol_args[7])
                 # First use the density range to compute minimum aligned grain
                 # sizes.
@@ -550,27 +564,27 @@ class Observer(object):
                         p_effinterp[i] = 1.0E-200
                 p_effinterp = np.abs(p_effinterp)
                 # Optional Plot of polarization efficiency with density and
-                # grain sizes.
-                if pol_args[8]:
-                    import matplotlib.pyplot as plt
-                    fig = plt.figure()
-                    plt.loglog(a_alginterp,p_effinterp*np.power(denom,-1.0))
-                    plt.ylim(1E-4,1E1)
-                    plt.ylabel('Polarization Efficiency')
-                    plt.xlabel('Minimum Aligned Grain Size (um)')
-                    if self.optlabel:
-                        fig.savefig(self.path+'poleffa'+self.optlabel+'.png')
-                    else:
-                        fig.savefig(self.path+'poleffa.png')
-                    fig = plt.figure()
-                    plt.loglog(densinterp,p_effinterp*np.power(denom,-1.0))
-                    plt.ylim(1E-4,1E1)
-                    plt.ylabel('Polarization Efficiency')
-                    plt.xlabel(r'Gas Number Density (cm$^{-3}$)')
-                    if self.optlabel:
-                        fig.savefig(self.path+'poleffd'+self.optlabel+'.png')
-                    else:
-                        fig.savefig(self.path+'poleffd.png')
+                # grain sizes. DISABLED IN NUMBA BRANCH
+                #if pol_args[8]:
+                #    import matplotlib.pyplot as plt
+                #    fig = plt.figure()
+                #    plt.loglog(a_alginterp,p_effinterp*np.power(denom,-1.0))
+                #    plt.ylim(1E-4,1E1)
+                #    plt.ylabel('Polarization Efficiency')
+                #    plt.xlabel('Minimum Aligned Grain Size (um)')
+                #    if self.optlabel:
+                #        fig.savefig(self.path+'poleffa'+self.optlabel+'.png')
+                #    else:
+                #        fig.savefig(self.path+'poleffa.png')
+                #    fig = plt.figure()
+                #    plt.loglog(densinterp,p_effinterp*np.power(denom,-1.0))
+                #    plt.ylim(1E-4,1E1)
+                #    plt.ylabel('Polarization Efficiency')
+                #    plt.xlabel(r'Gas Number Density (cm$^{-3}$)')
+                #    if self.optlabel:
+                #        fig.savefig(self.path+'poleffd'+self.optlabel+'.png')
+                #    else:
+                #        fig.savefig(self.path+'poleffd.png')
                 # Finally, interpolate the effective polarization efficiency for
                 # each voxel's minimum aligned grain size computed earlier.
                 emmcube = np.interp(a_algcube, a_alginterp, p_effinterp)
@@ -588,50 +602,103 @@ class Observer(object):
             assert len(rotation) == 3
             R = Rotator([rotation[0], rotation[1], rotation[2],
                          self.N, 0])
-            maskcube               = R.ScalarRotate(maskcube)
-            emmcube                = R.ScalarRotate(emmcube)
-            denscube               = R.ScalarRotate(denscube)
-            B2cube                 = R.ScalarRotate(B2cube)
-            Bxcube, Bycube, Bzcube = R.VectorRotate(Bxcube,Bycube,Bzcube)
+            maskcuberot                     = R.ScalarRotate(maskcube)
+            emmcuberot                      = R.ScalarRotate(emmcube)
+            denscuberot                     = R.ScalarRotate(self.denscube)
+            B2cuberot                       = R.ScalarRotate(self.B2cube)
+            Bxcuberot, Bycuberot, Bzcuberot = R.VectorRotate(self.Bxcube,
+                                                             self.Bycube,
+                                                             self.Bzcube)
+        else:
+            maskcuberot = maskcube
+            emmcuberot  = emmcube
+            denscuberot = self.denscube
+            B2cuberot   = self.B2cube
+            Bxcuberot   = self.Bxcube
+            Bycuberot   = self.Bycube
+            Bzcuberot   = self.Bzcube
         # Next, create the total cubes that will be integrated along the correct
         # axis. Then, integrate.
-        Ncube  = maskcube*denscube
+        Ncube  = maskcuberot*denscuberot
         if   axes == ['x','y']:
-            N2cube = maskcube*emmcube*denscube* \
-                     (((np.square(Bxcube)+np.square(Bycube))* \
-                                               np.power(B2cube,-1.0))-(2.0/3.0))
-            Qcube  = maskcube*emmcube*denscube* \
-                     (np.square(Bycube)-np.square(Bxcube))*np.power(B2cube,-1.0)
-            Ucube  = maskcube*emmcube*denscube* \
-                                       (2.0*Bxcube*Bycube)*np.power(B2cube,-1.0)
-            CD     = self.reselmt*np.sum(Ncube,  axis=2).T
-            Q      = self.reselmt*np.sum(Qcube,  axis=2).T
-            U      = self.reselmt*np.sum(Ucube,  axis=2).T
-            N2     = self.reselmt*np.sum(N2cube, axis=2).T
+            # This is the function that does the heavy lifting.
+            @numba.jit([numba.float64[:,:](numba.float64[:,:,:])], 
+                                      nopython=True, nogil=True, parallel=True)
+            def Integrate(target):
+                proj = np.zeros((target.shape[0],target.shape[1]))
+                for i in numba.prange(target.shape[0]):
+                    for j in numba.prange(target.shape[1]):
+                        for k in range(target.shape[2]):
+                            proj[i,j] += target[i,j,k]
+                return proj
+            N2cube = maskcuberot*emmcuberot*denscuberot* \
+                     (((np.square(Bxcuberot)+np.square(Bycuberot))* \
+                        np.power(B2cuberot,-1.0))-(2.0/3.0))
+            Qcube  = maskcuberot*emmcuberot*denscuberot* \
+                     (np.square(Bycuberot)-np.square(Bxcuberot))* \
+                      np.power(B2cuberot,-1.0)
+            Ucube  = maskcuberot*emmcuberot*denscuberot* \
+                     (2.0*Bxcuberot*Bycuberot)*np.power(B2cuberot,-1.0)
+            #CD     = self.reselmt*np.sum(Ncube,  axis=2).T
+            #Q      = self.reselmt*np.sum(Qcube,  axis=2).T
+            #U      = self.reselmt*np.sum(Ucube,  axis=2).T
+            #N2     = self.reselmt*np.sum(N2cube, axis=2).T
+            CD      = self.reselmt*Integrate(Ncube)
+            Q       = self.reselmt*Integrate(Qcube)
+            U       = self.reselmt*Integrate(Ucube)
+            N2      = self.reselmt*Integrate(N2cube)
         elif axes == ['z','x']:
-            N2cube = maskcube*emmcube*denscube* \
-                     (((np.square(Bzcube)+np.square(Bxcube))* \
-                                               np.power(B2cube,-1.0))-(2.0/3.0))
-            Qcube  = maskcube*emmcube*denscube* \
-                     (np.square(Bxcube)-np.square(Bzcube))*np.power(B2cube,-1.0)
-            Ucube  = maskcube*emmcube*denscube* \
-                                       (2.0*Bzcube*Bxcube)*np.power(B2cube,-1.0)
-            CD     = self.reselmt*np.sum(Ncube,  axis=1).T
-            Q      = self.reselmt*np.sum(Qcube,  axis=1).T
-            U      = self.reselmt*np.sum(Ucube,  axis=1).T
-            N2     = self.reselmt*np.sum(N2cube, axis=1).T
+            # This is the function that does the heavy lifting.
+            @numba.jit(nopython=True, nogil=True)
+            def Integrate(target):
+                proj = np.zeros((target.shape[0],target.shape[1]))
+                for k in range(target.shape[0]):
+                    for i in range(target.shape[2]):
+                        for j in range(target.shape[2]):
+                            proj[k,i] += target[i,j,k]
+                return proj
+            N2cube = maskcuberot*emmcuberot*denscuberot* \
+                     (((np.square(Bzcuberot)+np.square(Bxcuberot))* \
+                        np.power(B2cuberot,-1.0))-(2.0/3.0))
+            Qcube  = maskcuberot*emmcuberot*denscuberot* \
+                     (np.square(Bxcuberot)-np.square(Bzcuberot))* \
+                      np.power(B2cuberot,-1.0)
+            Ucube  = maskcuberot*emmcuberot*denscuberot* \
+                     (2.0*Bzcuberot*Bxcuberot)*np.power(B2cuberot,-1.0)
+            #CD     = self.reselmt*np.sum(Ncube,  axis=1).T
+            #Q      = self.reselmt*np.sum(Qcube,  axis=1).T
+            #U      = self.reselmt*np.sum(Ucube,  axis=1).T
+            #N2     = self.reselmt*np.sum(N2cube, axis=1).T
+            CD      = self.reselmt*Integrate(Ncube)
+            Q       = self.reselmt*Integrate(Qcube)
+            U       = self.reselmt*Integrate(Ucube)
+            N2      = self.reselmt*Integrate(N2cube)
         elif axes == ['y','z']:
-            N2cube = maskcube*emmcube*denscube* \
-                     (((np.square(Bycube)+np.square(Bzcube))* \
-                                               np.power(B2cube,-1.0))-(2.0/3.0))
-            Qcube  = maskcube*emmcube*denscube* \
-                     (np.square(Bzcube)-np.square(Bycube))*np.power(B2cube,-1.0)
-            Ucube  = maskcube*emmcube*denscube* \
-                                       (2.0*Bycube*Bzcube)*np.power(B2cube,-1.0)
-            CD     = self.reselmt*np.sum(Ncube,  axis=0).T
-            Q      = self.reselmt*np.sum(Qcube,  axis=0).T
-            U      = self.reselmt*np.sum(Ucube,  axis=0).T
-            N2     = self.reselmt*np.sum(N2cube, axis=0).T
+            # This is the function that does the heavy lifting.
+            @numba.jit(nopython=True, nogil=True)
+            def Integrate(target):
+                proj = np.zeros((target.shape[0],target.shape[1]))
+                for j in range(target.shape[0]):
+                    for k in range(target.shape[1]):
+                        for i in range(target.shape[2]):
+                            proj[j,k] += target[i,j,k]
+                return proj
+            N2cube = maskcuberot*emmcuberot*denscuberot* \
+                     (((np.square(Bycuberot)+np.square(Bzcuberot))* \
+                        np.power(B2cuberot,-1.0))-(2.0/3.0))
+            Qcube  = maskcuberot*emmcuberot*denscuberot* \
+                     (np.square(Bzcuberot)-np.square(Bycuberot))* \
+                      np.power(B2cuberot,-1.0)
+            Ucube  = maskcuberot*emmcuberot*denscuberot* \
+                     (2.0*Bycuberot*Bzcuberot)*np.power(B2cuberot,-1.0)
+            #CD     = self.reselmt*np.sum(Ncube,  axis=0).T
+            #Q      = self.reselmt*np.sum(Qcube,  axis=0).T
+            #U      = self.reselmt*np.sum(Ucube,  axis=0).T
+            #N2     = self.reselmt*np.sum(N2cube, axis=0).T
+            CD      = self.reselmt*Integrate(Ncube)
+            Q       = self.reselmt*Integrate(Qcube)
+            U       = self.reselmt*Integrate(Ucube)
+            N2      = self.reselmt*Integrate(N2cube)
 
         # Now mask any elements where the column density is not positive, in
         # case something bad happened in the simulation (unlikely) or there are
@@ -641,16 +708,17 @@ class Observer(object):
             for i in range(self.N):
                 if CD[i,j] <= 0.0:
                     safetymask[i,j] = True
-        CD = np.ma.masked_array(CD, safetymask)
-        Q  = np.ma.masked_array(Q,  safetymask)
-        U  = np.ma.masked_array(U,  safetymask)
-        N2 = np.ma.masked_array(N2, safetymask)
 
         # Compute derived quantities. Apply safety mask.
         I  = CD - N2
         Pi = np.sqrt(np.square(Q)+np.square(U))
         p  = Pi*np.ma.power(I,-1.0)
         ch = np.rad2deg(0.5*(np.pi + np.arctan2(U,Q)))
+
+        CD = np.ma.masked_array(CD, safetymask)
+        Q  = np.ma.masked_array(Q,  safetymask)
+        U  = np.ma.masked_array(U,  safetymask)
+        N2 = np.ma.masked_array(N2, safetymask)
         Pi = np.ma.masked_array(Pi, safetymask)
         I  = np.ma.masked_array(I,  safetymask)
         p  = np.ma.masked_array(p,  safetymask)
@@ -755,14 +823,6 @@ class Observer(object):
     # Base method for computing synthetic Zeeman observations of the magnetic
     # field strength.
     def          Zeeman(self, exc_args, rot_args):
-        ds           = yt.load(self.src)
-        ad           = ds.all_data()
-        d            = [self.N, self.N, self.N]
-        adcg         = ds.covering_grid(level=0,left_edge=[0.0,0.0,0.0],dims=d)
-        denscube     = adcg[self.densityhandle].to_ndarray()
-        Bxcube       = adcg[self.magneticxhandle].to_ndarray()
-        Bycube       = adcg[self.magneticyhandle].to_ndarray()
-        Bzcube       = adcg[self.magneticzhandle].to_ndarray()
         # exc_args. Modify these if you wish to adopt a different type of
         # exclusion criteria, or more of them.
         # First check if we will exclude by density threshold, and if so, create
@@ -771,21 +831,17 @@ class Observer(object):
         if exc_args[0] is not None:
             assert exc_args[0][0] in ['gt','lt']
             if   exc_args[0][0] == 'gt':
-                masks.append(denscube >= exc_args[0][1])
+                masks.append(self.denscube >= exc_args[0][1])
             elif exc_args[0][0] == 'lt':
-                masks.append(denscube <= exc_args[0][1])
+                masks.append(self.denscube <= exc_args[0][1])
         # Next check if we will adopt a z-velocity magnitude threshold, and if
         # so, create such a mask.
         if exc_args[1] is not None:
-            mxcube   = adcg[self.momentumxhandle].to_ndarray()
-            mycube   = adcg[self.momentumyhandle].to_ndarray()
-            mzcube   = adcg[self.momentumzhandle].to_ndarray()
-            vzcube   = np.absolute(mzcube/denscube)
             assert exc_args[1][0] in ('gt','lt')
             if   exc_args[1][0] == 'gt':
-                masks.append(vzcube >= exc_args[1][1])
+                masks.append(self.vzcube >= exc_args[1][1])
             elif exc_args[1][0] == 'lt':
-                masks.append(vzcube <= exc_args[1][1])
+                masks.append(self.vzcube <= exc_args[1][1])
         # Finally, combine the masks using logical or, so that any voxel that
         # is masked by any mask is in the final mask. (Different flavors of
         # logic can be implemented at will.)
@@ -803,22 +859,29 @@ class Observer(object):
             assert len(rotation) == 3
             R = Rotator([rotation[0], rotation[1], rotation[2],
                          self.N, 0])
-            maskcube               = R.ScalarRotate(maskcube)
-            denscube               = R.ScalarRotate(denscube)
-            Bxcube, Bycube, Bzcube = R.VectorRotate(Bxcube,Bycube,Bzcube)
-
+            maskcuberot                     = R.ScalarRotate(maskcube)
+            denscuberot                     = R.ScalarRotate(self.denscube)
+            Bxcuberot, Bycuberot, Bzcuberot = R.VectorRotate(self.Bxcube,
+                                                             self.Bycube,
+                                                             self.Bzcube)
+        else:
+            maskcuberot = maskcube
+            denscuberot = self.denscube
+            Bxcuberot   = self.Bxcube
+            Bycuberot   = self.Bycube
+            Bzcuberot   = self.Bzcube
         # Next, create the total cubes that will be integrated along the correct
         # axis. Then, integrate.
-        Ncube  = maskcube*denscube
+        Ncube  = maskcuberot*denscuberot
         if   axes == ['x','y']:
-            CD     = self.reselmt*np.sum(    Ncube,               axis=2).T
-            BZee   =              np.average(np.absolute(Bzcube), axis=2).T
+            CD     = self.reselmt*np.sum(    Ncube,                  axis=2).T
+            BZee   =              np.average(np.absolute(Bzcuberot), axis=2).T
         elif axes == ['z','x']:
-            CD     = self.reselmt*np.sum(    Ncube,               axis=1).T
-            BZee   =              np.average(np.absolute(Bycube), axis=1).T
+            CD     = self.reselmt*np.sum(    Ncube,                  axis=1).T
+            BZee   =              np.average(np.absolute(Bycuberot), axis=1).T
         elif axes == ['y','z']:
-            CD     = self.reselmt*np.sum(    Ncube,               axis=0).T
-            BZee   =              np.average(np.absolute(Bxcube), axis=0).T
+            CD     = self.reselmt*np.sum(    Ncube,                  axis=0).T
+            BZee   =              np.average(np.absolute(Bxcuberot), axis=0).T
 
         # Now mask any elements where the column density is not positive, in
         # case something bad happened in the simulation (unlikely) or there are
@@ -868,17 +931,6 @@ class Observer(object):
     # Base method for computing synthetic velocity moments. Uses NRAO CASA
     # definitions for the velocity moments.
     def VelocityMoments(self, exc_args, rot_args):
-        ds           = yt.load(self.src)
-        ad           = ds.all_data()
-        d            = [self.N, self.N, self.N]
-        adcg         = ds.covering_grid(level=0,left_edge=[0.0,0.0,0.0],dims=d)
-        denscube     = adcg[self.densityhandle  ].to_ndarray()
-        mxcube       = adcg[self.momentumxhandle].to_ndarray()
-        mycube       = adcg[self.momentumyhandle].to_ndarray()
-        mzcube       = adcg[self.momentumzhandle].to_ndarray()
-        vxcube       = mxcube/denscube
-        vycube       = mxcube/denscube
-        vzcube       = mxcube/denscube
         # exc_args. Modify these if you wish to adopt a different type of
         # exclusion criteria, or more of them.
         # First check if we will exclude by density threshold, and if so, create
@@ -887,18 +939,18 @@ class Observer(object):
         if exc_args[0] is not None:
             assert exc_args[0][0] in ['gt','lt']
             if   exc_args[0][0] == 'gt':
-                masks.append(denscube >= exc_args[0][1])
+                masks.append(self.denscube >= exc_args[0][1])
             elif exc_args[0][0] == 'lt':
-                masks.append(denscube <= exc_args[0][1])
+                masks.append(self.denscube <= exc_args[0][1])
         # Next check if we will adopt a z-velocity magnitude threshold, and if
         # so, create such a mask.
         if exc_args[1] is not None:
-            vzabscube = np.absolute(mzcube/denscube)
+            vzabscube = np.absolute(self.mzcube/self.denscube)
             assert exc_args[1][0] in ('gt','lt')
             if   exc_args[1][0] == 'gt':
-                masks.append(vzcube >= exc_args[1][1])
+                masks.append(self.vzcube >= exc_args[1][1])
             elif exc_args[1][0] == 'lt':
-                masks.append(vzcube <= exc_args[1][1])
+                masks.append(self.vzcube <= exc_args[1][1])
         # Finally, combine the masks using logical or, so that any voxel that
         # is masked by any mask is in the final mask. (Different flavors of
         # logic can be implemented at will.)
@@ -916,37 +968,48 @@ class Observer(object):
             assert len(rotation) == 3
             R = Rotator([rotation[0], rotation[1], rotation[2],
                          self.N, 0])
-            maskcube               = R.ScalarRotate(maskcube)
-            denscube               = R.ScalarRotate(denscube)
-            vxcube, vycube, vzcube = R.VectorRotate(vxcube,vycube,vzcube)
+            maskcuberot                     = R.ScalarRotate(maskcube)
+            denscuberot                     = R.ScalarRotate(self.denscube)
+            vxcuberot, vycuberot, vzcuberot = R.VectorRotate(self.mxcube,
+                                                             self.mycube,
+                                                             self.mzcube)
+            vxcuberot *= np.power(denscuberot, -1.0)
+            vycuberot *= np.power(denscuberot, -1.0)
+            vzcuberot *= np.power(denscuberot, -1.0)
+        else:
+            maskcuberot = maskcube
+            denscuberot = self.denscube
+            vxcuberot   = self.mxcube*np.power(self.denscube, -1.0)
+            vycuberot   = self.mycube*np.power(self.denscube, -1.0)
+            vzcuberot   = self.mzcube*np.power(self.denscube, -1.0)
 
         # Next, create the total cubes that will be integrated along the correct
         # axis. Then, integrate.
-        intcube  = maskcube*denscube
+        intcube  = maskcuberot*denscuberot
         if   axes == ['x','y']:
             M0     = self.reselmt*np.sum(intcube, axis=2).T
             M0inv  = np.power(M0, -1.0)
-            M1     = self.reselmt*np.sum(intcube*vzcube, axis=2).T
+            M1     = self.reselmt*np.sum(intcube*vzcuberot, axis=2).T
             M1    *= M0inv
-            v2cube = np.power((vzcube - np.stack([M1 for _ in range(self.N)],
+            v2cube = np.power((vzcuberot - np.stack([M1 for _ in range(self.N)],
                               axis=2)), 2.0)
             M2     = self.reselmt*np.sum(intcube*v2cube, axis=2).T
             M2     = np.power(M2*M0inv, 0.5)
         elif axes == ['z','x']:
             M0     = self.reselmt*np.sum(intcube, axis=1).T
             M0inv  = np.power(M0, -1.0)
-            M1     = self.reselmt*np.sum(intcube*vycube, axis=1).T
+            M1     = self.reselmt*np.sum(intcube*vycuberot, axis=1).T
             M1    *= M0inv
-            v2cube = np.power((vycube - np.stack([M1 for _ in range(self.N)],
+            v2cube = np.power((vycuberot - np.stack([M1 for _ in range(self.N)],
                               axis=1)), 2.0)
             M2     = self.reselmt*np.sum(intcube*v2cube, axis=1).T
             M2     = np.power(M2*M0inv, 0.5)
         elif axes == ['y','z']:
             M0     = self.reselmt*np.sum(intcube, axis=0).T
             M0inv  = np.power(M0, -1.0)
-            M1     = self.reselmt*np.sum(intcube*vxcube, axis=0).T
+            M1     = self.reselmt*np.sum(intcube*vxcuberot, axis=0).T
             M1    *= M0inv
-            v2cube = np.power((vxcube - np.stack([M1 for _ in range(self.N)],
+            v2cube = np.power((vxcuberot - np.stack([M1 for _ in range(self.N)],
                               axis=0)), 2.0)
             M2     = self.reselmt*np.sum(intcube*v2cube, axis=0).T
             M2     = np.power(M2*M0inv, 0.5)
@@ -957,7 +1020,7 @@ class Observer(object):
         safetymask = np.zeros((self.N,self.N)).astype(bool)
         for j in range(self.N):
             for i in range(self.N):
-                if CD[i,j] <= 0.0:
+                if M0[i,j] <= 0.0:
                     safetymask[i,j] = True
         M0 = np.ma.masked_array(M0, safetymask)
         M1 = np.ma.masked_array(M1, safetymask)
