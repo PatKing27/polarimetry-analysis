@@ -25,7 +25,7 @@
 # only those recommended in WD01. Changed 'DIFFUSE' option to 'CONSTANT' to
 # allow for other constant extinction models. Added 'EMPIRICAL' option,
 # including the polynomial fits obtained from empirical analysis of models A,
-# B, C, and D. Changed order of pol_args for RAT models. 
+# B, C, and D. Changed order of pol_args for RAT models.
 #
 #******************************************************************************#
 
@@ -34,6 +34,7 @@ import numpy                 as     np
 from   math                  import *
 from   yt.units.yt_array     import YTQuantity
 from   Rotator               import *
+import numba
 
 class Observable(object):
 
@@ -223,6 +224,7 @@ class Observer(object):
     # Writes observables computed at the end. Uses dust emissivity prescription
     # specified in pol_args, and excludes material in the simulation using
     # exc_args.
+    @ numba.jit(nopython=True)
     def     Polarimetry(self, exc_args, rot_args, pol_args):
         # Load data. Basic simulation requires a density (scalar) field; a
         # momentum (vector) field; and a magnetic (vector) field. If your
