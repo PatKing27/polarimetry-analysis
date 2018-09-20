@@ -35,7 +35,7 @@ class Plotter(object):
 
     # This method produces a simple map given a 2d array. It requires the
     # Observable, the name of the figure, and the (optional) beam.
-    def    Imager(self, O, fgname):
+    def    Imager(self, O, figname):
         # Obtain information from the Observable object.
         img  = O.data
         norm = O.norm

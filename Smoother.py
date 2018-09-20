@@ -75,13 +75,13 @@ class Smoother(object):
 
     def SmoothGradient(self, O):
         Nab = Nabla([self.fwhm,self.N,self.boxlen])
-        G   = Nab.ComputeGradient(O)
+        G   = Nab.ComputeGradient(O, O.data.mask)
         self.Nyquist(G)
         return G
 
     def SmoothAngleGradient(self, Q, U):
         Nab = Nabla([self.fwhm,self.N,self.boxlen])
-        S   = Nab.ComputeAngleGradient(Q,U)
+        S   = Nab.ComputeAngleGradient(Q,U,Q.data.mask)
         self.Nyquist(S)
         return S
 
